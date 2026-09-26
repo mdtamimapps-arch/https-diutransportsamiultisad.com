@@ -356,6 +356,28 @@ td{padding:11px 12px;border-top:1px solid var(--line-soft);vertical-align:middle
 .sw i{position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--surface);transition:left .16s ease}
 .sw.on{background:var(--green)} .sw.on i{left:22px}
 
+/* emergency hub + seat booking + day pass */
+.ehub{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.ecard{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:13px;padding:11px 12px;background:var(--surface-2)}
+.ecard b{display:block;font-size:13.5px}
+.ecard .p{font-family:var(--f-mono);font-weight:700;font-size:15px;color:var(--red)}
+.calllink{width:36px;height:36px;border-radius:50%;background:var(--red);color:#fff;display:grid;place-items:center;flex:none;text-decoration:none}
+.calllink svg{width:16px;height:16px}
+.threatbar{position:fixed;left:14px;right:14px;top:calc(10px + env(safe-area-inset-top,0px));z-index:95;background:var(--red);
+  color:#fff;border-radius:14px;padding:12px 16px;box-shadow:0 20px 50px -20px rgba(0,0,0,.6);display:flex;gap:10px;align-items:center;
+  flex-wrap:wrap;animation:slidepanel .2s ease}
+.threatbar button{background:#fff;color:var(--red);border:0;border-radius:999px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer}
+.seatmap{display:grid;grid-template-columns:1fr 1fr 18px 1fr 1fr;gap:8px;max-width:340px;margin:0 auto}
+.seat{aspect-ratio:1;border-radius:9px 9px 4px 4px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;
+  font-family:var(--f-mono);font-size:11.5px;font-weight:700;display:grid;place-items:center;color:var(--muted)}
+.seat:hover{border-color:var(--green)}
+.seat.taken{background:var(--line-soft);color:var(--faint);cursor:not-allowed;border-color:transparent}
+.seat.mine{background:var(--green);color:#fff;border-color:var(--green)}
+.seat.aisle{visibility:hidden}
+.slotcard{border:1px solid var(--line);border-radius:var(--r);padding:16px;background:var(--surface)}
+.slotcard.locked{opacity:.6}
+.daypasscard{background:linear-gradient(160deg,var(--blue),#123554);color:#EAF6F0;border-radius:var(--r-lg);padding:20px}
+
 /* AI chatbot */
 .fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:70;width:54px;height:54px;border-radius:50%;
   background:var(--green);color:#fff;border:0;display:grid;place-items:center;cursor:pointer;box-shadow:0 12px 26px -10px rgba(0,0,0,.45)}
@@ -471,7 +493,8 @@ const DATA = (()=>{
       phoneMasked:'+8801*****'+(10+i%80),
       fee:{ status: (i%9===4 ? 'DUE' : 'PAID'), amount: 3500, paidOn: (i%9===4?null:'05 Jan 2026'),
             fines: (i%17===3 ? 800 : 0) },
-      blocked: (i%23===9), blockReason: (i%23===9 ? 'Repeated boarding without a paid transport fee' : null)
+      blocked: (i%23===9), blockReason: (i%23===9 ? 'Repeated boarding without a paid transport fee' : null),
+      dayPass:null
     });
   }
   // demo student is index 0, pinned to Savar route
@@ -532,8 +555,9 @@ const DATA = (()=>{
       {dept:'Fleet & Maintenance', name:'Workshop Desk', phone:'+880 1811-556677', hours:'8:00 AM – 8:00 PM'},
       {dept:'Fee & Pass Section', name:'Accounts Desk', phone:'+880 1911-889900', hours:'10:00 AM – 4:00 PM'},
       {dept:'Emergency / Security', name:'Campus Security Control', phone:'999 or +880 1611-000111', hours:'24/7'},
-      {dept:'Savar Route Volunteer', name:'Zara Islam · DIU-07', phone:'+880 1611-234567', hours:'Trip hours'}
-    ]};
+      {dept:'Savar Route Volunteer', name:'Zara Islam · DIU-07', phone:'+880 1611-234567', hours:'Trip hours'},
+      {dept:'Medical Center', name:'DIU Medical Center, Ground Floor', phone:'+880 1511-778899', hours:'24/7'}
+    ], personalContacts:{}, bookings:[]};
 })();
 
 /* ======================== server/security ==========================
@@ -545,24 +569,41 @@ const DATA = (()=>{
 
 const PERMISSIONS = {
   student:[ 'profile.self','pass.self','route.read','bus.live','schedule.read','notice.read','chat.read','chat.write','notify.read',
-            'checkin.self','fee.self','safety.alert','complaint.self','contacts.read','findbus.read' ],
+            'checkin.self','fee.self','safety.alert','complaint.self','contacts.read','findbus.read',
+            'econtacts.self','threat.self','daypass.self','booking.self' ],
   faculty:[ 'profile.self','route.read','bus.live','schedule.read','notice.read','chat.read','chat.write','notify.read',
-            'safety.alert','complaint.self','contacts.read','findbus.read','shuttle.request' ],
+            'safety.alert','complaint.self','contacts.read','findbus.read','shuttle.request','econtacts.self','threat.self' ],
   driver:[ 'profile.self','route.read','bus.live','schedule.read','notice.read','chat.read','chat.write','notify.read',
            'trip.self','trip.start','trip.end','bus.location.update','passenger.read','qr.scan','checkin.read',
-           'safety.alert','contacts.read','findbus.read' ],
+           'safety.alert','contacts.read','findbus.read','econtacts.self','threat.self' ],
   volunteer:[ 'profile.self','route.read','bus.live','schedule.read','notice.read','chat.read','chat.write','notify.read',
               'trip.self','trip.start','trip.end','bus.location.update','passenger.read','rfid.scan','pass.verify','qr.scan','checkin.read',
-              'safety.alert','contacts.read','findbus.read' ],
+              'safety.alert','contacts.read','findbus.read','econtacts.self','threat.self' ],
   admin:[ 'profile.self','route.read','bus.live','schedule.read','notice.read','chat.read','chat.write','notify.read',
           'fleet.read','bus.manage','route.manage','student.manage','pass.manage','trip.read.all','trip.manage',
           'notice.write','chat.moderate','analytics.read','audit.read','passenger.read','qr.scan','checkin.read','fee.manage',
-          'complaint.manage','safety.manage','contacts.read','contacts.manage','findbus.read' ],
+          'complaint.manage','safety.manage','contacts.read','contacts.manage','findbus.read','booking.manage' ],
   superadmin:['*']
 };
 
 /* Password rules live server-side; the client only mirrors them for UX. */
 const PASSWORD_POLICY = { min:10, upper:true, digit:true, symbol:true };
+
+
+/* ---------------- shared schedule / seat-booking constants ---------- */
+const SLOT_DEFS = [
+  {time:'7:00 AM', dir:'go'}, {time:'9:30 AM', dir:'go'},
+  {time:'1:00 PM', dir:'return'}, {time:'5:15 PM', dir:'return'}
+];
+function todayKey(offsetDays){ const d=new Date(Date.now()+(offsetDays||0)*864e5);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function slotDateTime(dateStr, timeStr){
+  const [y,mo,da] = dateStr.split('-').map(Number);
+  const m = /(\d+):(\d+)\s*(AM|PM)/i.exec(timeStr);
+  let h = +m[1]%12; if(/pm/i.test(m[3])) h += 12;
+  return new Date(y, mo-1, da, h, +m[2], 0, 0).getTime();
+}
+function seatCode(i){ const row=Math.floor(i/4)+1; const col=['A','B','C','D'][i%4]; return row+col; }
 
 const Server = {
   /* --- credential store. Real system: Argon2id, never reversible. --- */
@@ -741,11 +782,12 @@ const Server = {
         Server.audit('rfid.reject', ctx.userId, 'Unknown card '+maskUid(uid)+' on '+trip.busId, false);
         return { result:'UNKNOWN_CARD', message:'This card is not registered in the transport system.' };
       }
-      if(st.pass.status!=='ACTIVE'){
+      const dayPassOk = st.dayPass && st.dayPass.date===todayKey() && st.dayPass.routeId===trip.routeId;
+      if(!dayPassOk && st.pass.status!=='ACTIVE'){
         Server.audit('rfid.reject', ctx.userId, mask(st.studentId)+' pass '+st.pass.status+' on '+trip.busId, false);
         return { result:'REJECTED', reason:st.pass.status, student:safeStudent(st), message:'Transport pass is '+st.pass.status.toLowerCase()+'.' };
       }
-      if(st.routeId !== trip.routeId){
+      if(!dayPassOk && st.routeId !== trip.routeId){
         Server.audit('rfid.reject', ctx.userId, mask(st.studentId)+' wrong route on '+trip.busId, false);
         return { result:'WRONG_ROUTE', student:safeStudent(st),
                  message:'This pass is issued for '+routeName(st.routeId)+', not '+routeName(trip.routeId)+'.' };
@@ -924,9 +966,10 @@ const Server = {
       const st = parsed.student;
       if(!st) return deny('INVALID','No student matches this code.');
       if(st.blocked) return deny('BLOCKED','Bus access is restricted on this account. Send the student to the transport office.', st);
-      if(st.pass.status!=='ACTIVE') return deny('PASS_'+st.pass.status,'Transport pass is '+st.pass.status.toLowerCase()+'.', st);
-      if(st.routeId!==trip.routeId) return deny('WRONG_BUS','This code is for '+routeName(st.routeId)+', not '+routeName(trip.routeId)+'.', st);
-      if(st.fee.status!=='PAID'){
+      const dayPassOk = st.dayPass && st.dayPass.date===todayKey() && st.dayPass.routeId===trip.routeId;
+      if(!dayPassOk && st.pass.status!=='ACTIVE') return deny('PASS_'+st.pass.status,'Transport pass is '+st.pass.status.toLowerCase()+'.', st);
+      if(!dayPassOk && st.routeId!==trip.routeId) return deny('WRONG_BUS','This code is for '+routeName(st.routeId)+', not '+routeName(trip.routeId)+'.', st);
+      if(!dayPassOk && st.fee.status!=='PAID'){
         /* Fee bypass detected. Policy fine is raised automatically and the
            account is restricted until the office reviews it. */
         st.fee.fines += 800;
@@ -949,7 +992,7 @@ const Server = {
       const left = trip.capacity-trip.passengers;
       if(left<=5 && left>0) Notify.push({scope:'route',routeId:trip.routeId,title:'Only '+left+' seats left on '+trip.busId,body:'Seats are filling up fast.',level:'warn'});
       return { result:'GRANTED', student:safeStudent(st), passengers:trip.passengers, capacity:trip.capacity,
-               seatsLeft:left, offline, trip:publicTrip(trip,ctx.role) };
+               seatsLeft:left, offline, dayPass:!!dayPassOk, trip:publicTrip(trip,ctx.role) };
     }},
 
     /* The scanner holds queued scans while it is offline and replays them
@@ -1018,24 +1061,62 @@ const Server = {
     }},
 
     /* ---------------------- safety, complaints, contacts, faculty ------ */
+    /* Smart SOS — one-tap, 3x shake, accident/impact, and voice triggers all
+       land here immediately. No confirmation step: an SOS is already a
+       decision the person made (or the impact sensor made for them). */
     'safety.alert':{ perm:'safety.alert', fn:(ctx, body)=>{
       const u = DATA.users.find(x=>x.id===ctx.userId);
       const trip = DATA.trips.find(t=>(t.busId===ctx.busId || t.routeId===ctx.routeId) && t.state!=='COMPLETED');
-      const a = { id:'sos'+Date.now(), at:Date.now(), by:ctx.userId, name:u.name, role:ctx.role,
+      const kind = ['SOS','SHAKE','ACCIDENT','VOICE'].includes(body&&body.kind) ? body.kind : 'SOS';
+      const a = { id:'sos'+Date.now(), at:Date.now(), by:ctx.userId, name:u.name, role:ctx.role, kind,
         routeId: ctx.routeId || (trip?trip.routeId:null), busId: trip?trip.busId:(ctx.busId||null),
         note: Server.clean(body&&body.note,300) || 'Emergency button pressed', status:'OPEN' };
       DATA.safetyAlerts.unshift(a);
-      Server.audit('safety.sos', ctx.userId, u.name+' triggered an SOS'+(a.busId?' on '+a.busId:'')+(a.note?' — "'+a.note+'"':''), false);
-      Notify.push({scope:'all', title:'SOS raised by '+u.name, body:(a.busId?'On '+a.busId+'. ':'')+'Transport office and campus security have been alerted.', level:'err'});
+      Server.audit('safety.sos', ctx.userId, u.name+' triggered '+kind+(a.busId?' on '+a.busId:'')+(a.note?' — "'+a.note+'"':''), false);
+      Notify.push({scope:'all', title:(kind==='SOS'?'SOS':kind[0]+kind.slice(1).toLowerCase()+' alert')+' raised by '+u.name,
+        body:(a.busId?'On '+a.busId+'. ':'')+'Transport office and campus security have been alerted.', level:'err'});
       return { ok:true, alertId:a.id, contactedAt:Date.now() };
     }},
-    'safety.alerts':{ perm:'safety.manage', fn:()=> DATA.safetyAlerts.slice(0,50) },
+    'safety.alerts':{ perm:'safety.manage', fn:()=> DATA.safetyAlerts.slice(0,80) },
     'safety.resolve':{ perm:'safety.manage', fn:(ctx, body)=>{
       const a = DATA.safetyAlerts.find(x=>x.id===body.id);
       if(!a) throw err(404,'Alert not found.');
       a.status='RESOLVED'; a.resolvedBy=ctx.userId; a.note2=Server.clean(body.note,200);
-      Server.audit('safety.resolve', ctx.userId, 'SOS from '+a.name+' marked resolved · '+(a.note2||''));
+      Server.audit('safety.resolve', ctx.userId, (a.kind||'SOS')+' from '+a.name+' marked resolved · '+(a.note2||''));
       return {ok:true};
+    }},
+
+    /* AI Threat Detection — passive telemetry analysis raises a PENDING
+       alert and a 2-minute "are you safe?" window before it escalates. */
+    'threat.trigger':{ perm:'threat.self', fn:(ctx, body)=>{
+      const u = DATA.users.find(x=>x.id===ctx.userId);
+      const trip = DATA.trips.find(t=>(t.busId===ctx.busId || t.routeId===ctx.routeId) && t.state!=='COMPLETED');
+      const a = { id:'th'+Date.now(), at:Date.now(), by:ctx.userId, name:u.name, role:ctx.role, kind:'AI_THREAT',
+        routeId: ctx.routeId || (trip?trip.routeId:null), busId: trip?trip.busId:(ctx.busId||null),
+        note: Server.clean(body&&body.reason,200) || 'Unusual pattern detected by onboard monitoring',
+        meta: body&&body.meta || {}, status:'PENDING' };
+      DATA.safetyAlerts.unshift(a);
+      Server.audit('threat.detected', ctx.userId, 'AI monitoring flagged '+a.note+' on '+(a.busId||'route')+' — awaiting rider response', false);
+      return { id:a.id, note:a.note };
+    }},
+    'threat.ack':{ perm:'threat.self', fn:(ctx, body)=>{
+      const a = DATA.safetyAlerts.find(x=>x.id===body.id && x.by===ctx.userId);
+      if(!a) throw err(404,'Nothing pending.');
+      if(a.status==='PENDING'){ a.status='RESOLVED'; a.note2='Rider confirmed they are safe.'; }
+      Server.audit('threat.ack', ctx.userId, a.name+' confirmed safe — no alert sent');
+      return {ok:true};
+    }},
+    'threat.escalate':{ perm:'threat.self', fn:(ctx, body)=>{
+      const a = DATA.safetyAlerts.find(x=>x.id===body.id && x.by===ctx.userId);
+      if(!a) throw err(404,'Nothing pending.');
+      if(a.status!=='PENDING') return {ok:true, already:true};
+      const trip = DATA.trips.find(t=>t.busId===a.busId && t.state!=='COMPLETED');
+      const battery = Number.isFinite(body&&body.battery) ? Math.round(body.battery) : (40+Math.floor(Math.random()*55));
+      a.status='OPEN'; a.escalated=true; a.battery=battery;
+      a.location = trip ? publicTrip(trip,'admin').nearStop : 'Last known stop unavailable';
+      Server.audit('threat.escalate', ctx.userId, 'No response from '+a.name+' in 2 minutes — live location, bus '+(a.busId||'—')+' and battery '+battery+'% sent to emergency contacts', false);
+      Notify.push({scope:'all', title:'Auto-escalated: '+a.name+' did not respond', body:'Location near '+a.location+', bus '+(a.busId||'—')+'. Transport office and campus security notified.', level:'err'});
+      return { ok:true, location:a.location, battery };
     }},
 
     'contacts':{ perm:'contacts.read', fn:()=> DATA.contacts },
@@ -1045,6 +1126,97 @@ const Server = {
       Server.audit('contacts.update', ctx.userId, 'Transport office directory updated');
       return DATA.contacts;
     }},
+
+    /* Personal emergency contacts — one per user account, up to 5. */
+    'econtacts.mine':{ perm:'econtacts.self', fn:(ctx)=> DATA.personalContacts[ctx.userId] || [] },
+    'econtacts.add':{ perm:'econtacts.self', fn:(ctx, body)=>{
+      const list = DATA.personalContacts[ctx.userId] = DATA.personalContacts[ctx.userId] || [];
+      if(list.length>=5) throw err(400,'You can save up to 5 emergency contacts.');
+      const name = Server.clean(body.name,60), phone = Server.clean(body.phone,30), relation = Server.clean(body.relation,40)||'Contact';
+      if(!name || !phone) throw err(400,'Add a name and a phone number.');
+      const c = { id:'ec'+Date.now(), name, phone, relation };
+      list.push(c);
+      Server.audit('econtacts.add', ctx.userId, 'Added emergency contact "'+name+'"');
+      return c;
+    }},
+    'econtacts.remove':{ perm:'econtacts.self', fn:(ctx, body)=>{
+      const list = DATA.personalContacts[ctx.userId] || [];
+      const i = list.findIndex(c=>c.id===body.id);
+      if(i<0) throw err(404,'Contact not found.');
+      list.splice(i,1);
+      Server.audit('econtacts.remove', ctx.userId, 'Removed an emergency contact');
+      return {ok:true};
+    }},
+
+    /* One-day transport pass — bypasses the semester pass/fee check for
+       today's trips on the chosen route only. */
+    'daypass.status':{ perm:'daypass.self', fn:(ctx)=>{
+      const st = DATA.students.find(s=>s.id===ctx.userId);
+      if(!st) throw err(404,'No student record on this account.');
+      const active = st.dayPass && st.dayPass.date===todayKey() ? st.dayPass : null;
+      return { dayPass:active };
+    }},
+    'daypass.buy':{ perm:'daypass.self', fn:(ctx, body)=>{
+      const st = DATA.students.find(s=>s.id===ctx.userId);
+      if(!st) throw err(404,'No student record on this account.');
+      const routeId = body.routeId || st.routeId;
+      const dp = { date:todayKey(), routeId, code:'DP-'+Date.now().toString(36).toUpperCase(), boughtAt:Date.now() };
+      st.dayPass = dp;
+      Server.audit('daypass.buy', ctx.userId, st.name+' bought a one-day pass for '+routeName(routeId));
+      return { dayPass:dp };
+    }},
+
+    /* Seat booking — one seat, one student, one slot. Going buses (tomorrow
+       morning) open for booking as soon as they are on the schedule; return
+       buses only open 30 minutes before departure. Server re-checks both
+       the window and the seat every time — never trusts the client's flags. */
+    'booking.board':{ perm:'booking.self', fn:(ctx)=>{
+      const routeId = ctx.routeId;
+      if(!routeId) throw err(400,'No route is assigned to this account.');
+      const bus = DATA.buses.find(b=>b.routeId===routeId) || {capacity:40};
+      const now = Date.now();
+      return SLOT_DEFS.map(sdef=>{
+        const date = sdef.dir==='go' ? todayKey(1) : todayKey(0);
+        const depAt = slotDateTime(date, sdef.time);
+        const taken = DATA.bookings.filter(b=>b.date===date && b.slot===sdef.time && b.routeId===routeId).map(b=>b.seat);
+        const mine = DATA.bookings.find(b=>b.date===date && b.slot===sdef.time && b.routeId===routeId && b.studentId===ctx.userId);
+        const windowOpen = sdef.dir==='go' ? depAt>now : (depAt>now && depAt-now<=30*60000);
+        return { time:sdef.time, dir:sdef.dir, date, depAt, capacity:bus.capacity, taken,
+                 mySeat: mine?mine.seat:null, windowOpen, opensAt: sdef.dir==='return'? depAt-30*60000 : null };
+      });
+    }},
+    'booking.create':{ perm:'booking.self', fn:(ctx, body)=>{
+      const routeId = ctx.routeId;
+      const sdef = SLOT_DEFS.find(x=>x.time===body.slot && x.dir===body.dir);
+      if(!sdef) throw err(400,'Unknown departure slot.');
+      const date = sdef.dir==='go' ? todayKey(1) : todayKey(0);
+      const depAt = slotDateTime(date, sdef.time);
+      const now = Date.now();
+      if(sdef.dir==='go' && depAt<=now) throw err(409,'This departure has already passed.');
+      if(sdef.dir==='return' && !(depAt>now && depAt-now<=30*60000)) throw err(409,'Seat booking for the return bus opens 30 minutes before departure.');
+      const bus = DATA.buses.find(b=>b.routeId===routeId) || {capacity:40};
+      const seat = Server.clean(body.seat,6);
+      const idx = ['A','B','C','D'].indexOf(seat.slice(-1));
+      if(idx<0 || +seat.slice(0,-1) < 1 || +seat.slice(0,-1) > Math.ceil(bus.capacity/4)) throw err(400,'That is not a valid seat on this bus.');
+      if(DATA.bookings.some(b=>b.date===date && b.slot===sdef.time && b.routeId===routeId && b.seat===seat))
+        throw err(409,'Seat '+seat+' was just taken by someone else. Pick another seat.');
+      if(DATA.bookings.some(b=>b.date===date && b.slot===sdef.time && b.routeId===routeId && b.studentId===ctx.userId))
+        throw err(409,'You already booked a seat on this departure.');
+      const u = DATA.users.find(x=>x.id===ctx.userId);
+      const bkg = { id:'bk'+Date.now(), studentId:ctx.userId, name:u.name, routeId, dir:sdef.dir, date, slot:sdef.time, seat, bookedAt:now };
+      DATA.bookings.unshift(bkg);
+      Server.audit('booking.create', ctx.userId, u.name+' booked seat '+seat+' on '+routeName(routeId)+' · '+date+' '+sdef.time);
+      return bkg;
+    }},
+    'booking.mine':{ perm:'booking.self', fn:(ctx)=> DATA.bookings.filter(b=>b.studentId===ctx.userId) },
+    'booking.cancel':{ perm:'booking.self', fn:(ctx, body)=>{
+      const i = DATA.bookings.findIndex(b=>b.id===body.id && b.studentId===ctx.userId);
+      if(i<0) throw err(404,'Booking not found.');
+      const b = DATA.bookings[i]; DATA.bookings.splice(i,1);
+      Server.audit('booking.cancel', ctx.userId, b.name+' cancelled seat '+b.seat+' on '+b.date+' '+b.slot);
+      return {ok:true};
+    }},
+    'bookings.admin':{ perm:'booking.manage', fn:()=> DATA.bookings.slice(0,150) },
 
     'complaint.create':{ perm:'complaint.self', fn:(ctx, body)=>{
       const u = DATA.users.find(x=>x.id===ctx.userId);
@@ -1454,6 +1626,7 @@ const NAV = {
     {g:'Today'},{k:'dashboard',t:'Dashboard',i:'home'},{k:'findbus',t:'Find my bus',i:'search'},{k:'checkin',t:'Bus check-in',i:'scan'},
     {k:'live',t:'Live bus',i:'bus'},{k:'schedule',t:'Schedule',i:'clock'},{k:'routemap',t:'Route map',i:'map'},
     {g:'My account'},{k:'pass',t:'Transport pass',i:'card'},{k:'chat',t:'Route chat',i:'chat'},{k:'notices',t:'Notices',i:'bell'},
+    {g:'Book ahead'},{k:'seatbook',t:'Seat booking',i:'card'},{k:'daypass',t:'One-day pass',i:'clock'},
     {g:'Help & safety'},{k:'safety',t:'Safety',i:'siren'},{k:'complaint',t:'Complaint box',i:'inbox'},{k:'contacts',t:'Transport office',i:'phone'},{k:'settings',t:'Settings',i:'gear'}],
   faculty:[
     {g:'Today'},{k:'dashboard',t:'Dashboard',i:'home'},{k:'findbus',t:'Find my bus',i:'search'},{k:'live',t:'Live bus',i:'bus'},
@@ -1474,12 +1647,12 @@ const NAV = {
     {g:'Operations'},{k:'dashboard',t:'Dashboard',i:'home'},{k:'fleet',t:'Live fleet',i:'bus'},{k:'trips',t:'Trips',i:'route'},{k:'checkins',t:'Check-ins & fines',i:'scan'},
     {g:'Manage'},{k:'buses',t:'Buses',i:'bus'},{k:'routes',t:'Routes & stops',i:'map'},{k:'students',t:'Students & passes',i:'users'},
     {k:'notices',t:'Notices',i:'bell'},{k:'chatmod',t:'Chat moderation',i:'chat'},
-    {g:'Support'},{k:'complaints',t:'Complaint box',i:'inbox'},{k:'safetyadmin',t:'Safety alerts',i:'siren'},{k:'contactsadmin',t:'Office contacts',i:'phone'},
+    {g:'Support'},{k:'complaints',t:'Complaint box',i:'inbox'},{k:'safetyadmin',t:'Safety alerts',i:'siren'},{k:'bookings',t:'Seat bookings',i:'card'},{k:'contactsadmin',t:'Office contacts',i:'phone'},
     {g:'Insight'},{k:'analytics',t:'Analytics',i:'chart'},{k:'audit',t:'Audit log',i:'shield'},{k:'settings',t:'Settings',i:'gear'}],
   superadmin:[
     {g:'Control'},{k:'dashboard',t:'Dashboard',i:'home'},{k:'users',t:'Users',i:'users'},{k:'roles',t:'Roles & permissions',i:'shield'},
     {g:'Transport'},{k:'fleet',t:'Live fleet',i:'bus'},{k:'buses',t:'Buses',i:'bus'},{k:'checkins',t:'Check-ins & fines',i:'scan'},{k:'students',t:'Students & passes',i:'users'},
-    {k:'analytics',t:'Analytics',i:'chart'},{k:'complaints',t:'Complaint box',i:'inbox'},{k:'safetyadmin',t:'Safety alerts',i:'siren'},{k:'contactsadmin',t:'Office contacts',i:'phone'},
+    {k:'analytics',t:'Analytics',i:'chart'},{k:'complaints',t:'Complaint box',i:'inbox'},{k:'safetyadmin',t:'Safety alerts',i:'siren'},{k:'bookings',t:'Seat bookings',i:'card'},{k:'contactsadmin',t:'Office contacts',i:'phone'},
     {g:'Security'},{k:'sessions',t:'Active sessions',i:'wifi'},{k:'audit',t:'Audit log',i:'log'},{k:'system',t:'System settings',i:'gear'}]
 };
 const TABS = {
@@ -1648,6 +1821,97 @@ const UI = {
   live(){ $$('[data-live]').forEach(n=>{ const f = LIVE[n.dataset.live]; if(f) f(n); }); this.paintBell(); }
 };
 const LIVE = {};
+
+/* ========================= smart safety client ======================= */
+async function fireSOS(note, kind){
+  try{ await API.call('safety.alert',{note, kind: kind||'SOS'}); toast('SOS sent', note, 'err'); }
+  catch(e){ toast('Not sent', e.message, 'err'); }
+}
+const ThreatMonitor = {
+  pending:null, timer:null,
+  start(id, ttl){
+    if(this.pending) return;
+    this.pending = { id, endsAt: Date.now()+ttl };
+    this.renderBar();
+    this.timer = setInterval(()=>{
+      if(!this.pending){ clearInterval(this.timer); return; }
+      if(Date.now() >= this.pending.endsAt){ this.escalate(); return; }
+      this.renderBar();
+    }, 1000);
+  },
+  async ack(){
+    if(!this.pending) return;
+    const id = this.pending.id; this.pending=null; clearInterval(this.timer); this.removeBar();
+    try{ await API.call('threat.ack',{id}); toast('Marked safe','Good — no alert was sent to your contacts.'); }catch(e){}
+    UI.live();
+  },
+  async escalate(){
+    if(!this.pending) return;
+    const id = this.pending.id; this.pending=null; clearInterval(this.timer); this.removeBar();
+    let battery=null;
+    try{ if(navigator.getBattery){ const b = await navigator.getBattery(); battery = Math.round(b.level*100); } }catch(e){}
+    try{ await API.call('threat.escalate',{id, battery}); }catch(e){}
+    toast('Alert escalated','No response in time — live location, bus ID and battery level were sent to the transport office and your emergency contacts.','err');
+    UI.live();
+  },
+  renderBar(){
+    if(!this.pending) return this.removeBar();
+    let b = document.getElementById('threatbar');
+    const left = Math.max(0, this.pending.endsAt - Date.now());
+    const mm = Math.floor(left/60000), ss = Math.floor(left%60000/1000);
+    if(!b){ b = el('<div class="threatbar" id="threatbar"></div>'); document.body.appendChild(b); }
+    b.innerHTML = '<span style="flex:1;min-width:200px"><b>Are you safe?</b> Unusual activity was detected on your bus.</span>'+
+      '<span class="mono" style="font-size:15px">'+mm+':'+String(ss).padStart(2,'0')+'</span>'+
+      '<button id="tb_ok">I am safe</button>';
+    document.getElementById('tb_ok').onclick = ()=>this.ack();
+  },
+  removeBar(){ const b=document.getElementById('threatbar'); if(b) b.remove(); }
+};
+async function fireThreat(reason, meta){
+  if(ThreatMonitor.pending) return toast('Already monitoring','A safety check is already in progress for this account.','warn');
+  try{
+    const r = await API.call('threat.trigger',{reason, meta});
+    ThreatMonitor.start(r.id, 120000);
+    toast('Possible issue detected', reason, 'warn');
+  }catch(e){ toast('Cannot run this check', e.message, 'err'); }
+}
+const ShakeGuard = {
+  on:false, listener:null, hits:[],
+  arm(){
+    const req = (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function')
+      ? DeviceMotionEvent.requestPermission() : Promise.resolve('granted');
+    req.then(state=>{
+      if(state!=='granted'){ toast('Permission needed','Allow motion access in your browser to enable shake detection.','warn'); return; }
+      this.listener = (e)=>{
+        const a = e.accelerationIncludingGravity || e.acceleration; if(!a) return;
+        const mag = Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2);
+        if(mag>22){ const now=Date.now(); this.hits.push(now); this.hits=this.hits.filter(t=>now-t<1500);
+          if(this.hits.length>=3){ this.hits=[]; fireSOS('Triggered by 3× phone shake','SHAKE'); } }
+      };
+      window.addEventListener('devicemotion', this.listener);
+      this.on = true; toast('Shake detection on','Shake your phone hard 3 times in a row to send an SOS.');
+    }).catch(()=> toast('Not supported','This browser or device does not expose motion data.','warn'));
+  },
+  disarm(){ if(this.listener) window.removeEventListener('devicemotion', this.listener); this.on=false; this.listener=null; this.hits=[]; }
+};
+const VoiceGuard = {
+  on:false, recog:null,
+  arm(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ toast('Not supported','Voice detection needs Chrome on Android or desktop.','warn'); return; }
+    try{
+      this.recog = new SR(); this.recog.continuous=true; this.recog.interimResults=true; this.recog.lang='en-US';
+      this.recog.onresult = (e)=>{
+        const text = Array.from(e.results).map(r=>r[0].transcript).join(' ').toLowerCase();
+        if(/\bhelp\b|bachao|save me/.test(text)){ fireSOS('Triggered by voice — heard a distress word','VOICE'); this.disarm(); if($('#voicesw')) $('#voicesw').classList.remove('on'); }
+      };
+      this.recog.onerror = ()=>{ this.on=false; };
+      this.recog.start(); this.on = true;
+      toast('Voice detection on','Listening quietly for a distress word like “help”.');
+    }catch(e){ toast('Cannot start','Voice detection failed to start on this device.','warn'); }
+  },
+  disarm(){ if(this.recog){ try{ this.recog.stop(); }catch(e){} } this.on=false; this.recog=null; }
+};
 
 const Theme = {
   current(){ const t = document.documentElement.getAttribute('data-theme');
@@ -2915,26 +3179,36 @@ VIEWS.findbus = async (v)=>{
 /* --------------------------- safety features ------------------------- */
 VIEWS.safety = async (v)=>{
   const busId = State.user.busId || null;
-  const trip = busId ? myTrip() : null;
+  const trip = busId ? myTrip() : DATA.trips.find(t=>t.routeId===State.user.routeId && t.state!=='COMPLETED');
   const bus = busId ? DATA.buses.find(b=>b.id===busId) : DATA.buses.find(b=>b.routeId===State.user.routeId);
   const driver = bus ? DATA.users.find(u=>u.id===bus.driverId) : null;
   const volunteer = bus ? DATA.users.find(u=>u.id===bus.volunteerId) : null;
+  const econtacts = await API.call('econtacts.mine');
+  const hubContacts = DATA.contacts.filter(c=>/Security|Transport Office|Medical/.test(c.dept)).slice(0,3);
+
   v.innerHTML = `<div class="split">
     <div class="stack">
       <div class="card pad-lg" style="text-align:center">
         <div class="lamp" style="width:84px;height:84px;margin:0 auto 12px;border-radius:50%;background:var(--red-wash);display:grid;place-items:center;border:3px solid var(--red)">${I.siren()}</div>
-        <h3>Emergency SOS</h3>
-        <p class="muted" style="font-size:14px;margin:6px auto 16px;max-width:34ch">Sends your name, route and bus straight to the transport office and campus security. Use it if you feel unsafe on a bus or at a stop.</p>
-        <button class="btn danger big block" id="sos">${I.siren()}Send SOS now</button>
+        <h3>Smart SOS</h3>
+        <p class="muted" style="font-size:14px;margin:6px auto 16px;max-width:36ch">Any of these send your name, route and bus straight to the transport office and campus security — instantly, no confirmation needed.</p>
+        <button class="btn danger big block" id="sos">${I.siren()}One-tap SOS</button>
         <div id="sosr" style="margin-top:12px"></div>
+        <div class="hr"></div>
+        <div class="stack" style="gap:10px;text-align:left">
+          <div class="between"><div><div style="font-weight:600;font-size:14px">Shake 3× to send SOS</div><p class="muted" style="font-size:12.5px">Uses your phone's motion sensor. Stays armed while this page is open.</p></div>
+            <button class="sw" id="shakesw"><i></i></button></div>
+          <div class="between"><div><div style="font-weight:600;font-size:14px">Listen for a distress word</div><p class="muted" style="font-size:12.5px">Says “help” out loud and it fires automatically.</p></div>
+            <button class="sw" id="voicesw"><i></i></button></div>
+          <div class="between"><div><div style="font-weight:600;font-size:14px">Accident / impact detection</div><p class="muted" style="font-size:12.5px">Demo: simulates a crash sensor firing.</p></div>
+            <button class="btn" id="crashbtn" style="font-size:12.5px;padding:6px 12px">Simulate impact</button></div>
+        </div>
       </div>
-      <div class="card pad-lg"><h3 style="margin-bottom:10px">On-board safety</h3>
-        ${[['CCTV on board','All active buses carry a dashboard camera'],['Verified driver & staff','Every driver and volunteer is registered against a bus ID'],
-           ['Live location shared','Your route chat and staff can see the bus location while a trip runs'],
-           ['Night route lighting check','Stops on this route are checked for lighting before evening trips']]
-          .map(([t,d])=>`<div class="between" style="padding:10px 0;border-top:1px solid var(--line-soft)">
-            <div><div style="font-weight:600;font-size:14.5px">${t}</div><div class="muted" style="font-size:13px">${d}</div></div>
-            <span class="chip green">${I.check()}</span></div>`).join('')}
+      <div class="card pad-lg"><h3 style="margin-bottom:6px">AI Threat Detection</h3>
+        <p class="muted" style="font-size:13.5px;margin-bottom:12px">Runs quietly in the background while a trip is active, watching GPS location, speed, sudden impact, how long the bus has been stopped, route deviation, and — optionally — abnormal sound.</p>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px" id="telemetry"></div>
+        <p class="muted" style="font-size:13px">If something looks wrong, your phone asks <b>“Are you safe?”</b>. No answer in 2 minutes and the system sends your live location, bus ID &amp; route, and phone battery to your emergency contacts — plus the transport office and campus security.</p>
+        <button class="btn block" id="threattest" style="margin-top:12px">Run a detection test (demo)</button>
       </div>
     </div>
     <div class="stack">
@@ -2944,39 +3218,202 @@ VIEWS.safety = async (v)=>{
         <div class="row" style="gap:10px;padding:8px 0;border-top:1px solid var(--line-soft)"><div class="avatar">${volunteer?volunteer.name.split(' ').map(x=>x[0]).slice(0,2).join(''):'—'}</div>
           <div><div style="font-weight:600">${volunteer?escapeHtml(volunteer.name):'Not assigned'}</div><div class="faint" style="font-size:12.5px">Volunteer · verified</div></div></div>
         </div>`:''}
-      <div class="card pad-lg"><h3 style="margin-bottom:10px">Share my live location</h3>
-        <div class="between"><div><div style="font-weight:600">Guardian sharing</div><p class="muted" style="font-size:13px">Send your bus location to a saved emergency contact while boarded.</p></div>
-        <button class="sw" id="shsw"><i></i></button></div>
-        <p class="faint" style="font-size:12px;margin-top:10px" id="shst">Off — nothing is shared right now.</p></div>
-      <div class="card pad-lg"><div class="secnote">${I.phone()}<span>In a real emergency, call campus security or 999 first — the SOS button notifies the transport office but is not a replacement for an emergency call.</span></div></div>
+      <div class="card pad-lg"><h3 style="margin-bottom:10px">Emergency Contact Hub</h3>
+        <p class="muted" style="font-size:13px;margin-bottom:10px">Institutional numbers — tap to call directly.</p>
+        <div class="ehub">${hubContacts.concat(DATA.contacts.filter(c=>c.dept==='Medical Center')).map(c=>`
+          <div class="ecard"><a class="calllink" href="tel:${escapeHtml(c.phone.replace(/[^\d+]/g,''))}">${I.phone()}</a>
+          <div><b>${escapeHtml(c.dept)}</b><div class="p">${escapeHtml(c.phone)}</div></div></div>`).join('')}
+        </div>
+        <div class="hr"></div>
+        <p class="muted" style="font-size:13px;margin-bottom:8px">Your personal emergency contacts — added here, called with one tap when you need them.</p>
+        <div id="eclist"></div>
+        <form id="ecf" class="row wrap" style="gap:8px;margin-top:8px">
+          <input id="ecn" type="text" placeholder="Name" style="flex:1;min-width:100px">
+          <input id="ecr" type="text" placeholder="Relation" style="width:110px">
+          <input id="ecp" type="text" placeholder="Phone" class="mono" style="flex:1;min-width:120px">
+          <button class="btn primary" type="submit">Add</button>
+        </form>
+      </div>
+      <div class="card pad-lg"><div class="secnote">${I.phone()}<span>In a real emergency, call 999 or campus security first — these tools alert the transport office fast, but are not a replacement for an emergency call.</span></div></div>
     </div></div>`;
+
+  // one-tap SOS
   $('#sos').onclick = ()=>{
     const body = el('<div class="field"><label>What is happening? (optional)</label><textarea id="son" rows="3" placeholder="Feeling unsafe near the Beribadh stop."></textarea></div>');
     modal({title:'Send an SOS alert?', body, confirm:'Send SOS', danger:true, onConfirm: async ()=>{
-      try{ await API.call('safety.alert',{note:$('#son').value});
+      try{ await API.call('safety.alert',{note:$('#son').value, kind:'SOS'});
         $('#sosr').innerHTML = '<div class="secnote">'+I.check()+'<span>Alert sent. The transport control room and campus security have your name, route and last known location.</span></div>';
         toast('SOS sent','Transport office notified immediately.','err');
       }catch(e){ toast('Not sent', e.message,'err'); return false; } }});
   };
-  $('#shsw').onclick = ()=>{ const on=$('#shsw').classList.toggle('on');
-    $('#shst').textContent = on? 'On — your live bus location is shared with your saved guardian contact.' : 'Off — nothing is shared right now.'; };
+  // shake / voice toggles
+  $('#shakesw').classList.toggle('on', ShakeGuard.on);
+  $('#shakesw').onclick = ()=>{ if(ShakeGuard.on){ ShakeGuard.disarm(); $('#shakesw').classList.remove('on'); toast('Shake detection off',''); } else { ShakeGuard.arm(); $('#shakesw').classList.add('on'); } };
+  $('#voicesw').classList.toggle('on', VoiceGuard.on);
+  $('#voicesw').onclick = ()=>{ if(VoiceGuard.on){ VoiceGuard.disarm(); $('#voicesw').classList.remove('on'); toast('Voice detection off',''); } else { VoiceGuard.arm(); $('#voicesw').classList.add('on'); } };
+  $('#crashbtn').onclick = ()=> fireSOS('Possible accident — sudden impact detected by the bus sensor','ACCIDENT');
+  $('#threattest').onclick = ()=> fireThreat('Bus has been stationary for 11 minutes, off the assigned route', {stoppedMin:11, deviation:true});
+
+  // telemetry readout (mock, refreshes)
+  const paintTele = ()=>{
+    const t = trip ? publicTrip(DATA.trips.find(x=>x.id===trip.id)||trip, State.user.role) : null;
+    const speed = t && t.state==='IN TRANSIT' ? 22+Math.round(Math.random()*14) : 0;
+    const stopped = t && t.state!=='IN TRANSIT' ? Math.round((Date.now()-(t.lastUpdate||Date.now()))/60000) : 0;
+    const rows = [['GPS location', t? t.nearStop : 'No active trip'], ['Speed', speed+' km/h'],
+      ['Stopped for', stopped+' min'], ['Route deviation', 'None detected'], ['Sound analysis', 'Normal (optional)']];
+    $('#telemetry') && ($('#telemetry').innerHTML = rows.map(([k,val])=>
+      '<div class="tile" style="padding:10px"><div class="k" style="margin-bottom:2px">'+k+'</div><div class="n mono" style="font-size:15px">'+escapeHtml(String(val))+'</div></div>').join(''));
+  };
+  paintTele(); UI.every(4000, paintTele);
+
+  // personal contacts
+  const paintEc = (list)=>{ $('#eclist').innerHTML = list.length? list.map(c=>`<div class="ecard" style="margin-bottom:8px">
+      <a class="calllink" href="tel:${escapeHtml(c.phone.replace(/[^\d+]/g,''))}">${I.phone()}</a>
+      <div style="flex:1"><b>${escapeHtml(c.name)}</b><div class="faint" style="font-size:12px">${escapeHtml(c.relation)} · ${escapeHtml(c.phone)}</div></div>
+      <button class="btn ghost" data-rm="${c.id}" style="font-size:12px;padding:5px 8px">Remove</button></div>`).join('')
+    : '<p class="faint" style="font-size:13px">No personal emergency contacts saved yet.</p>';
+    $$('[data-rm]').forEach(b=>b.onclick=async()=>{ await API.call('econtacts.remove',{id:b.dataset.rm}); paintEc(await API.call('econtacts.mine')); toast('Contact removed',''); }); };
+  paintEc(econtacts);
+  $('#ecf').onsubmit = async (e)=>{
+    e.preventDefault();
+    try{ await API.call('econtacts.add',{name:$('#ecn').value, relation:$('#ecr').value, phone:$('#ecp').value});
+      $('#ecn').value=''; $('#ecr').value=''; $('#ecp').value='';
+      paintEc(await API.call('econtacts.mine')); toast('Contact added','It will be used if an SOS or AI alert escalates.');
+    }catch(e2){ toast('Not added', e2.message,'err'); }
+  };
 };
 VIEWS.safetyadmin = async (v)=>{
   const paint = async ()=>{
     const rows = await API.call('safety.alerts');
+    const badge = (a)=>{
+      if(a.kind==='AI_THREAT'){
+        if(a.status==='PENDING') return '<span class="chip yellow">Awaiting response</span>';
+        if(a.escalated) return '<span class="chip red">Escalated</span>';
+        return '<span class="chip green">Confirmed safe</span>';
+      }
+      return a.status==='OPEN' ? '<span class="chip red">Open</span>' : '<span class="chip green">Resolved</span>';
+    };
     $('#sabody').innerHTML = rows.length? rows.map(a=>`<tr><td class="mono faint">${clock(a.at)}</td>
       <td>${escapeHtml(a.name)}<div class="faint" style="font-size:12px">${a.role}</div></td>
-      <td class="mono">${a.busId||'—'}</td><td>${a.note?escapeHtml(a.note):'<span class="faint">No note</span>'}</td>
-      <td>${a.status==='OPEN'?'<span class="chip red">Open</span>':'<span class="chip green">Resolved</span>'}</td>
-      <td>${a.status==='OPEN'?'<button class="btn" data-res="'+a.id+'" style="padding:5px 12px;font-size:13px">Resolve</button>':'—'}</td></tr>`).join('')
-      : '<tr><td colspan="6"><div class="empty"><h3>No alerts</h3><p>Emergency SOS presses will appear here the moment they are sent.</p></div></td></tr>';
+      <td><span class="chip">${(a.kind||'SOS').replace('_',' ')}</span></td>
+      <td class="mono">${a.busId||'—'}</td>
+      <td>${a.note?escapeHtml(a.note):'<span class="faint">No note</span>'}${a.escalated?'<div class="faint" style="font-size:12px">Location: '+escapeHtml(a.location||'—')+' · Battery: '+a.battery+'%</div>':''}</td>
+      <td>${badge(a)}</td>
+      <td>${(a.status==='OPEN')?'<button class="btn" data-res="'+a.id+'" style="padding:5px 12px;font-size:13px">Resolve</button>':'—'}</td></tr>`).join('')
+      : '<tr><td colspan="7"><div class="empty"><h3>No alerts</h3><p>Emergency SOS presses and AI threat detections will appear here the moment they happen.</p></div></td></tr>';
     $$('[data-res]').forEach(b=>b.onclick=async()=>{ await API.call('safety.resolve',{id:b.dataset.res,note:'Checked in with the person, situation resolved.'}); toast('Marked resolved',''); paint(); });
   };
   v.innerHTML = `<div class="card"><div class="pad-lg" style="padding-bottom:8px"><h3>Safety / SOS alerts</h3>
-    <p class="muted" style="font-size:13.5px">Every emergency button press across student, faculty, driver and volunteer accounts lands here.</p></div>
-    <div class="tablewrap"><table><thead><tr><th>Time</th><th>Person</th><th>Bus</th><th>Note</th><th>Status</th><th></th></tr></thead>
+    <p class="muted" style="font-size:13.5px">Smart SOS presses and AI Threat Detection escalations across every account land here, with live location, bus ID and battery when a threat auto-escalates.</p></div>
+    <div class="tablewrap"><table><thead><tr><th>Time</th><th>Person</th><th>Kind</th><th>Bus</th><th>Detail</th><th>Status</th><th></th></tr></thead>
     <tbody id="sabody"></tbody></table></div></div>`;
   paint(); UI.every(4000,paint);
+};
+
+/* ---------------------------- one-day pass --------------------------- */
+VIEWS.daypass = async (v)=>{
+  const routes = await API.call('routes');
+  const paint = async ()=>{
+    const {dayPass} = await API.call('daypass.status');
+    if(dayPass){
+      v.innerHTML = `<div class="split">
+        <div class="daypasscard">
+          <div style="font-size:12px;opacity:.75">One-day transport pass</div>
+          <div style="font-family:var(--f-display);font-weight:800;font-size:26px;margin-top:4px">${escapeHtml(routeName(dayPass.routeId))}</div>
+          <div class="row wrap" style="margin-top:12px;gap:16px">
+            <div><div class="pk" style="font-size:11.5px;opacity:.75">Valid for</div><div class="pv">${dayPass.date} only</div></div>
+            <div><div class="pk" style="font-size:11.5px;opacity:.75">Reference</div><div class="pv mono">${dayPass.code}</div></div>
+          </div>
+          <div class="barcode">${Array.from({length:46},(_,i)=>'<i style="width:'+(1+(i*7%3))+'px"></i>').join('')}</div>
+        </div>
+        <div class="card pad-lg">
+          <h3 style="margin-bottom:8px">How to use it</h3>
+          <p class="muted" style="font-size:14px">Open <b>Bus check-in</b> and generate your usual check-in code — it will be accepted on ${escapeHtml(routeName(dayPass.routeId))} today even if your semester pass or fee status would normally block boarding.</p>
+          <button class="btn block" style="margin-top:14px" data-go="checkin">Go to Bus check-in</button>
+        </div></div>`;
+      wireGo(v);
+    } else {
+      v.innerHTML = `<div class="card pad-lg" style="max-width:520px">
+        <h3 style="margin-bottom:6px">Buy a one-day pass</h3>
+        <p class="muted" style="font-size:14px;margin-bottom:14px">For a single day of travel — a guest trip, a one-off errand, or riding before your semester pass is renewed. Valid only for today, on the route you choose.</p>
+        <div class="field" style="margin-bottom:14px"><label>Route</label>
+          <select id="dpr">${routes.map(r=>'<option value="'+r.id+'" '+(r.id===State.user.routeId?'selected':'')+'>'+escapeHtml(r.name)+'</option>').join('')}</select></div>
+        <button class="btn primary big block" id="dpb">Buy one-day pass</button>
+        <p class="faint" style="font-size:12px;margin-top:10px">Demo purchase — no real payment is taken.</p>
+      </div>`;
+      $('#dpb').onclick = async ()=>{
+        try{ await API.call('daypass.buy',{routeId:$('#dpr').value}); toast('Pass issued','Valid today on '+routeName($('#dpr').value)+'.'); paint(); }
+        catch(e){ toast('Not issued', e.message,'err'); }
+      };
+    }
+  };
+  paint();
+};
+
+/* --------------------------- seat booking ----------------------------- */
+function seatMapHtml(capacity, taken, mySeat){
+  const rows = Math.ceil(capacity/4);
+  let html = '';
+  for(let r=1; r<=rows; r++){
+    for(let c=0;c<4;c++){
+      if(c===2) html += '<span class="seat aisle"></span>';
+      const idx = (r-1)*4+c;
+      if(idx>=capacity){ html += '<span class="seat aisle"></span>'; continue; }
+      const code = seatCode(idx);
+      const cls = code===mySeat ? 'mine' : (taken.includes(code) ? 'taken' : '');
+      html += '<button class="seat '+cls+'" data-seat="'+code+'" '+(cls==='taken'?'disabled':'')+'>'+code+'</button>';
+    }
+  }
+  return '<div class="seatmap">'+html+'</div>';
+}
+VIEWS.seatbook = async (v)=>{
+  const paintAll = async ()=>{
+    const [slots, mine] = await Promise.all([API.call('booking.board'), API.call('booking.mine')]);
+    v.innerHTML = `<div class="stack" style="gap:16px">
+      <div class="card pad-lg"><h3 style="margin-bottom:4px">Seat booking</h3>
+        <p class="muted" style="font-size:14px">Book a numbered seat like a train ticket — no more crowding at the door. Morning buses can be booked any time before departure; return buses open 30 minutes before they leave.</p></div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        ${slots.map(s=>`<div class="slotcard ${s.windowOpen?'':'locked'}">
+          <div class="between"><div><div style="font-weight:700;font-family:var(--f-display);font-size:17px">${s.time}</div>
+            <div class="muted" style="font-size:13px">${s.dir==='go'?'Going · '+s.date:'Return · '+s.date}</div></div>
+            ${s.mySeat?'<span class="chip green">Seat '+s.mySeat+'</span>':(s.windowOpen?'<span class="chip">'+(s.capacity-s.taken.length)+' open</span>':'<span class="chip yellow">Locked</span>')}</div>
+          ${s.windowOpen? '<button class="btn primary block" style="margin-top:12px" data-open="'+escapeHtml(JSON.stringify(s))+'">'+(s.mySeat?'Change seat':'Choose seat')+'</button>'
+            : '<p class="faint" style="font-size:12.5px;margin-top:12px">'+(s.dir==='return'?'Opens at '+clock(s.opensAt):'Departed')+'</p>'}
+        </div>`).join('')}
+      </div>
+      <div class="card pad-lg"><h3 style="margin-bottom:10px">My bookings</h3><div id="mybk"></div></div>
+    </div>`;
+    $('#mybk').innerHTML = mine.length ? mine.map(b=>`<div class="between" style="padding:10px 0;border-top:1px solid var(--line-soft)">
+      <div><b>${escapeHtml(routeName(b.routeId))}</b> · seat <span class="mono">${b.seat}</span>
+        <div class="faint" style="font-size:12.5px">${b.date} · ${b.slot} · ${b.dir==='go'?'Going':'Return'}</div></div>
+      <button class="btn ghost" data-cancel="${b.id}" style="font-size:12.5px">Cancel</button></div>`).join('')
+      : '<div class="empty"><p>No seats booked yet.</p></div>';
+    $$('[data-cancel]').forEach(b=>b.onclick=async()=>{ await API.call('booking.cancel',{id:b.dataset.cancel}); toast('Booking cancelled',''); paintAll(); });
+    $$('[data-open]').forEach(btn=>btn.onclick=()=>{
+      const s = JSON.parse(btn.getAttribute('data-open'));
+      const body = el('<div><p class="muted" style="font-size:13.5px;margin-bottom:12px">'+s.time+' · '+s.date+' · tap an open seat</p>'+seatMapHtml(s.capacity, s.taken, s.mySeat)+'</div>');
+      const m = modal({title:'Choose your seat', body});
+      $$('.seat:not(.taken)', m.root).forEach(seatBtn=>{
+        seatBtn.onclick = async ()=>{
+          try{ await API.call('booking.create',{slot:s.time, dir:s.dir, seat:seatBtn.dataset.seat});
+            toast('Seat booked', 'Seat '+seatBtn.dataset.seat+' on '+s.time+'.'); m.close(); paintAll(); }
+          catch(e){ toast('Cannot book that seat', e.message,'err'); }
+        };
+      });
+    });
+  };
+  paintAll();
+  UI.every(20000, paintAll);
+};
+VIEWS.bookings = async (v)=>{
+  const rows = await API.call('bookings.admin');
+  v.innerHTML = `<div class="card"><div class="pad-lg" style="padding-bottom:8px"><h3>Seat bookings</h3>
+    <p class="muted" style="font-size:13.5px">${rows.length} seats booked across upcoming departures.</p></div>
+    <div class="tablewrap"><table><thead><tr><th>Student</th><th>Route</th><th>Date</th><th>Slot</th><th>Direction</th><th>Seat</th><th>Booked</th></tr></thead>
+    <tbody>${rows.length? rows.map(b=>`<tr><td>${escapeHtml(b.name)}</td><td>${escapeHtml(routeName(b.routeId))}</td>
+      <td class="mono">${b.date}</td><td class="mono">${b.slot}</td><td>${b.dir==='go'?'Going':'Return'}</td>
+      <td class="mono" style="font-weight:700">${b.seat}</td><td class="mono faint">${clock(b.bookedAt)}</td></tr>`).join('')
+      : '<tr><td colspan="7"><div class="empty"><h3>No bookings yet</h3><p>Seats students reserve ahead of time will show up here.</p></div></td></tr>'}</tbody></table></div></div>`;
 };
 
 /* ------------------------------ complaint box ------------------------ */
